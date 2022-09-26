@@ -1,6 +1,7 @@
 package com.chatapp.chatServerApp.controller;
 
 import com.chatapp.chatServerApp.model.Message;
+import com.chatapp.chatServerApp.model.Status;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -18,8 +19,11 @@ public class chatController {
     // Whenever a user wants to receive a message from this public chatroom then, they need to listen to the topic in @SendTo.
 
     @MessageMapping("/message") // user sends a message to /app/message
-    @SendTo("/chat-room/public")
     private Message receivePublicMessage(@Payload Message message) {
+        System.out.println(message.getSenderName());
+        System.out.println(message.getGroup());
+        System.out.println(message.getMessage());
+        simpMessagingTemplate.convertAndSend("/chat-room/public/" + message.getGroup(), message);
         return message;
     }
 

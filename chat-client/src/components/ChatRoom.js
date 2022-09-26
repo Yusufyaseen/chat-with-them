@@ -1,6 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { over } from "stompjs";
 import SockJS from "sockjs-client";
+import { Button } from "@mui/material";
+import { IconButton } from "@mui/material";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
+import { Container, Grid, TextField } from "@material-ui/core";
 let stompClient = null;
 const ChatRoom = () => {
   const [publicChat, setPublicChat] = useState([]);
@@ -8,10 +12,22 @@ const ChatRoom = () => {
   const [privateChats, setPrivateChats] = useState(new Map());
   const [userData, setUserData] = useState({
     username: "",
+    group: "",
     receiverName: "",
     connected: false,
     message: "",
+    date: "",
+    // selectedFile: "",
   });
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [publicChat]);
 
   const handleValue = (e) =>
     setUserData({ ...userData, [e.target.name]: e.target.value });
@@ -19,7 +35,11 @@ const ChatRoom = () => {
   const onError = (e) => console.log("Error..");
   const onConnected = (e) => {
     setUserData({ ...userData, connected: true });
-    stompClient.subscribe("/chat-room/public", onPublicMessage);
+    console.log(userData);
+    stompClient.subscribe(
+      "/chat-room/public/" + userData.group,
+      onPublicMessage
+    );
     stompClient.subscribe(
       "/user/" + userData.username + "/private",
       onPrivateMessage
@@ -30,6 +50,7 @@ const ChatRoom = () => {
   const userJoin = () => {
     var chatMessage = {
       senderName: userData.username,
+      group: userData.group,
       status: "JOIN",
     };
     stompClient.send("/app/message", {}, JSON.stringify(chatMessage));
@@ -45,12 +66,8 @@ const ChatRoom = () => {
         }
         break;
       case "MESSAGE":
-        console.log("//////////");
-        console.log(payloadData);
         publicChat.push(payloadData);
         setPublicChat([...publicChat]);
-        console.log(Array.isArray(publicChat));
-        console.log(publicChat[0].message);
         break;
     }
   };
@@ -67,12 +84,50 @@ const ChatRoom = () => {
     }
   };
 
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter") {
+      sendValue();
+    }
+  };
+  const handleKeyPressPrivate = (e) => {
+    if (e.key === "Enter") {
+      sendPrivateValue();
+    }
+  };
+
+  // const handleFile = async (e) => {
+  //   const file = e.target.files[0];
+  //   const fileReader = new FileReader();
+
+  //   fileReader.onload = () => {
+  //     let buffer = new Uint8Array(fileReader.result);
+  //     shareFile(buffer, file.name);
+  //   };
+  //   fileReader.readAsArrayBuffer(file);
+  // };
+
+  // const shareFile = async (buffer, name) => {
+  //   let len = buffer.byteLength;
+  //   const chunk = await buffer.slice(0, len);
+  //   buffer = [];
+  //   console.log(chunk);
+  //    setUserData({
+  //      ...userData,
+  //      selectedFile: chunk,
+  //    });
+  //   sendValue(chunk);
+  // };
+
   const sendValue = () => {
+    console.log(userData.selectedFile);
+    if (!userData.message) return;
     if (stompClient) {
       let chatMessage = {
         senderName: userData.username,
+        group: userData.group,
         message: userData.message,
         status: "MESSAGE",
+        date: new Date().toLocaleString(),
       };
       stompClient.send("/app/message", {}, JSON.stringify(chatMessage));
       setUserData({ ...userData, message: "" });
@@ -86,6 +141,7 @@ const ChatRoom = () => {
         receiverName: tab,
         message: userData.message,
         status: "MESSAGE",
+        date: new Date().toLocaleString(),
       };
       if (userData.username !== tab) {
         privateChats.get(tab).push(chatMessage);
@@ -102,10 +158,16 @@ const ChatRoom = () => {
     stompClient.connect({}, onConnected, onError);
   };
   return (
-    <div className="container">
+    <Container>
       {userData.connected ? (
-        <div className="chat-box">
-          <div className="member-list">
+        <Grid
+          container
+          justifyContent="space-between"
+          spacing={3}
+          alignItems="stretch"
+          direction="row"
+        >
+          <Grid item xs={12} sm={3} md={3} lg={3} className="member-list">
             <ul>
               <li
                 onClick={() => {
@@ -127,10 +189,10 @@ const ChatRoom = () => {
                 </li>
               ))}
             </ul>
-          </div>
+          </Grid>
 
           {tab === "CHATROOM" && (
-            <div className="chat-content">
+            <Grid item xs={12} sm={9} md={9} lg={9}>
               <ul className="chat-messages">
                 {publicChat.map((chat, index) => (
                   <li
@@ -142,35 +204,64 @@ const ChatRoom = () => {
                     {chat.senderName !== userData.username && (
                       <div className="avatar">{chat.senderName}</div>
                     )}
+                    {chat.senderName === userData.username && (
+                      <div className="message-date">{chat.date}</div>
+                    )}
                     <div className="message-data">{chat.message}</div>
+
                     {chat.senderName === userData.username && (
                       <div className="avatar self">{chat.senderName}</div>
                     )}
+                    {chat.senderName !== userData.username && (
+                      <div className="message-date">{chat.date}</div>
+                    )}
                   </li>
                 ))}
+                <div ref={messagesEndRef} />
               </ul>
 
               <div className="send-message">
-                <input
+                <TextField
                   type="text"
                   name="message"
+                  variant="outlined"
                   className="input-message"
                   placeholder="enter the message"
                   value={userData.message}
+                  onKeyPress={handleKeyPress}
                   onChange={handleValue}
                 />
-                <button
-                  type="button"
+                {/* &nbsp;
+                <input
+                  name="file"
+                  type="file"
+                  id="take-file"
+                  onChange={handleFile}
+                  style={{ display: "none" }}
+                />
+                <label htmlFor="take-file">
+                  <IconButton
+                    color="default"
+                    aria-label="upload picture"
+                    className="file"
+                    component="span"
+                  >
+                    <AttachFileIcon />
+                  </IconButton>
+                </label> */}
+                <Button
+                  variant="contained"
                   className="send-button"
-                  onClick={sendValue}
+                  disabled={userData.message === "" && true}
+                  onClick={() => sendValue(0)}
                 >
                   send
-                </button>
+                </Button>
               </div>
-            </div>
+            </Grid>
           )}
           {tab !== "CHATROOM" && (
-            <div className="chat-content">
+            <Grid item xs={12} sm={9} md={9} lg={9}>
               <ul className="chat-messages">
                 {[...privateChats.get(tab)].map((chat, index) => (
                   <li
@@ -182,48 +273,75 @@ const ChatRoom = () => {
                     {chat.senderName !== userData.username && (
                       <div className="avatar">{chat.senderName}</div>
                     )}
+                    {chat.senderName === userData.username && (
+                      <div className="message-date">{chat.date}</div>
+                    )}
                     <div className="message-data">{chat.message}</div>
+
                     {chat.senderName === userData.username && (
                       <div className="avatar self">{chat.senderName}</div>
+                    )}
+                    {chat.senderName !== userData.username && (
+                      <div className="message-date">{chat.date}</div>
                     )}
                   </li>
                 ))}
               </ul>
               <div className="send-message">
-                <input
+                <TextField
                   type="text"
                   name="message"
+                  variant="outlined"
                   className="input-message"
                   placeholder="enter the message"
                   value={userData.message}
+                  onKeyPress={handleKeyPressPrivate}
                   onChange={handleValue}
                 />
-                <button
-                  type="button"
+                &nbsp;
+                <Button
+                  variant="contained"
                   className="send-button"
+                  disabled={userData.message === "" && true}
                   onClick={sendPrivateValue}
                 >
                   send
-                </button>
+                </Button>
               </div>
-            </div>
+            </Grid>
           )}
-        </div>
+        </Grid>
       ) : (
         <div className="register">
-          <input
-            id="user-name"
+          <TextField
+            className="usr"
+            variant="outlined"
             placeholder="Enter your username"
             value={userData.username}
             name="username"
             onChange={handleValue}
           />
-          <button type="button" onClick={registerUser}>
+          &nbsp;
+          <TextField
+            className="usr"
+            variant="outlined"
+            placeholder="Enter your group"
+            value={userData.group}
+            name="group"
+            onChange={handleValue}
+          />
+          &nbsp;
+          <Button
+            variant="contained"
+            disabled={userData.username === "" && true}
+            className="btn"
+            onClick={registerUser}
+          >
             Connect
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </Container>
   );
 };
 
